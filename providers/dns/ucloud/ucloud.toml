@@ -1,0 +1,34 @@
+Name = "UCloud"
+Description = '''UCloud is a Chinese cloud computing provider offering DNS management services.'''
+
+URL = "https://www.ucloud.cn"
+Code = "ucloud"
+Since = "v4.23.0"
+
+Example = '''
+UCLOUD_PUBLIC_KEY="xxx" \
+UCLOUD_SECRET_KEY="yyy" \
+lego --dns ucloud -d '*.example.com' -d example.com run
+
+# Or with optional parameters
+UCLOUD_PUBLIC_KEY="xxx" \
+UCLOUD_SECRET_KEY="yyy" \
+UCLOUD_PROJECT_ID="your-project-id" \
+UCLOUD_REGION="cn-bj" \
+UCLOUD_TTL=300 \
+lego --dns ucloud -d '*.example.com' -d example.com run
+'''
+
+[Configuration]
+  [Configuration.Credentials]
+    UCLOUD_PUBLIC_KEY = "Public key"
+    UCLOUD_SECRET_KEY = "Secret key"
+  [Configuration.Additional]
+    UCLOUD_PROJECT_ID = "Project ID (optional, can be empty)"
+    UCLOUD_REGION = "Region (optional, can be empty)"
+    UCLOUD_POLLING_INTERVAL = "Time between DNS propagation check in seconds (Default: 2)"
+    UCLOUD_PROPAGATION_TIMEOUT = "Maximum waiting time for DNS propagation in seconds (Default: 300)"
+    UCLOUD_TTL = "The TTL of the TXT record used for the DNS challenge in seconds (Default: 600)"
+
+[Links]
+  API = "https://docs.ucloud.cn/api/udnrv2-api/README"
