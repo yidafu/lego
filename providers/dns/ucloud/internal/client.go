@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -48,7 +47,7 @@ func (c *Client) AddRecord(record Record) error {
 		"RecordName": record.RecordName,
 		"DnsType":    record.DnsType,
 		"Content":    record.Content,
-		"TTL":       record.TTL,
+		"TTL":        record.TTL,
 	}
 
 	if record.Prio != "" {
@@ -78,49 +77,6 @@ func (c *Client) DeleteRecord(domain, name, recordType, content string) error {
 	}
 
 	return nil
-}
-
-// FindRecordID finds a DNS record ID by domain, name, type and value.
-// Deprecated: This method is not used.
-func (c *Client) FindRecordID(domain, name, recordType, value string) (string, error) {
-	params := map[string]interface{}{
-		"Dn": domain,
-	}
-
-	response, err := c.doRequest("UdnrDomainDNSQuery", params)
-	if err != nil {
-		return "", fmt.Errorf("describe record: %w", err)
-	}
-
-	data, ok := response["Data"].([]interface{})
-	if !ok {
-		return "", errors.New("record not found")
-	}
-
-	for _, item := range data {
-		record, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		recordName, _ := record["RecordName"].(string)
-		dnsType, _ := record["DnsType"].(string)
-
-		if recordName == name && dnsType == recordType {
-			content, _ := record["Content"].(string)
-			if content == value {
-				return recordName + "|" + dnsType + "|" + content, nil
-			}
-		}
-	}
-
-	return "", errors.New("record not found")
-}
-
-func (c *Client) FindZone(domain string) (string, error) {
-	// Domain validation is now done via UdnrDomainDNSAdd API
-	// This method kept for compatibility but doesn't make API call
-	return domain, nil
 }
 
 func (c *Client) doRequest(action string, params map[string]interface{}) (map[string]interface{}, error) {

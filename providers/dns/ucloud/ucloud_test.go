@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/go-acme/lego/v4/platform/tester"
-	"github.com/go-acme/lego/v4/providers/dns/ucloud/internal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -140,9 +139,7 @@ func TestLiveCleanUp(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestInternalClientAddRecord tests the internal client's AddRecord method
-// against a mock server.
-func TestInternalClientAddRecord(t *testing.T) {
+func TestPresent(t *testing.T) {
 	var receivedBody map[string]interface{}
 
 	mux := http.NewServeMux()
@@ -166,33 +163,55 @@ func TestInternalClientAddRecord(t *testing.T) {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	client := internal.NewClient("test-public-key", "test-secret-key", "", "")
+	config := NewDefaultConfig()
+	config.PublicKey = "test-public-key"
+	config.SecretKey = "test-secret-key"
+
+	provider, err := NewDNSProviderConfig(config)
+	require.NoError(t, err)
+
 	serverURL, _ := url.Parse(server.URL)
-	client.BaseURL = serverURL
-	client.HTTPClient = server.Client()
+	provider.client.BaseURL = serverURL
+	provider.client.HTTPClient = server.Client()
 
-	record := internal.Record{
-		Dn:         "example.com.",
-		RecordName: "_acme-challenge.example.com.",
-		DnsType:    "TXT",
-		Content:   "test-value",
-		TTL:       "600",
-	}
-
-	err := client.AddRecord(record)
+	err = provider.Present("example.com", "", "123d==")
 	require.NoError(t, err)
 	require.Equal(t, "UdnrDomainDNSAdd", receivedBody["Action"])
-	require.Equal(t, "test-public-key", receivedBody["PublicKey"])
-	require.Equal(t, "example.com.", receivedBody["Dn"])
-	require.Equal(t, "_acme-challenge.example.com.", receivedBody["RecordName"])
-	require.Equal(t, "TXT", receivedBody["DnsType"])
-	require.Equal(t, "test-value", receivedBody["Content"])
-	require.Equal(t, "600", receivedBody["TTL"])
+	require.Equal(t, "example.com", receivedBody["Dn"])
 }
 
-// TestInternalClientDeleteRecord tests the internal client's DeleteRecord method
-// against a mock server.
-func TestInternalClientDeleteRecord(t *testing.T) {
+func TestPresentError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(rw http.ResponseWriter, req *http.Request) {
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusOK)
+		json.NewEncoder(rw).Encode(map[string]interface{}{
+			"RetCode": 95501,
+			"Action":  "UdnrDomainDNSAdd",
+			"Message": "数据库错误",
+			"Data":    nil,
+		})
+	})
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	config := NewDefaultConfig()
+	config.PublicKey = "test-public-key"
+	config.SecretKey = "test-secret-key"
+
+	provider, err := NewDNSProviderConfig(config)
+	require.NoError(t, err)
+
+	serverURL, _ := url.Parse(server.URL)
+	provider.client.BaseURL = serverURL
+	provider.client.HTTPClient = server.Client()
+
+	err = provider.Present("example.com", "", "123d==")
+	require.Error(t, err)
+}
+
+func TestCleanUp(t *testing.T) {
 	var receivedBody map[string]interface{}
 
 	mux := http.NewServeMux()
@@ -216,17 +235,50 @@ func TestInternalClientDeleteRecord(t *testing.T) {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	client := internal.NewClient("test-public-key", "test-secret-key", "", "")
-	serverURL, _ := url.Parse(server.URL)
-	client.BaseURL = serverURL
-	client.HTTPClient = server.Client()
+	config := NewDefaultConfig()
+	config.PublicKey = "test-public-key"
+	config.SecretKey = "test-secret-key"
 
-	err := client.DeleteRecord("example.com.", "_acme-challenge.example.com.", "TXT", "test-value")
+	provider, err := NewDNSProviderConfig(config)
+	require.NoError(t, err)
+
+	serverURL, _ := url.Parse(server.URL)
+	provider.client.BaseURL = serverURL
+	provider.client.HTTPClient = server.Client()
+
+	err = provider.CleanUp("example.com", "", "123d==")
 	require.NoError(t, err)
 	require.Equal(t, "UdnrDeleteDnsRecord", receivedBody["Action"])
-	require.Equal(t, "test-public-key", receivedBody["PublicKey"])
-	require.Equal(t, "example.com.", receivedBody["Dn"])
-	require.Equal(t, "_acme-challenge.example.com.", receivedBody["RecordName"])
-	require.Equal(t, "TXT", receivedBody["DnsType"])
-	require.Equal(t, "test-value", receivedBody["Content"])
+	require.Equal(t, "example.com", receivedBody["Dn"])
+}
+
+func TestCleanUpError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(rw http.ResponseWriter, req *http.Request) {
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusOK)
+		json.NewEncoder(rw).Encode(map[string]interface{}{
+			"RetCode": 95501,
+			"Action":  "UdnrDeleteDnsRecord",
+			"Message": "数据库错误",
+			"Data":    nil,
+		})
+	})
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	config := NewDefaultConfig()
+	config.PublicKey = "test-public-key"
+	config.SecretKey = "test-secret-key"
+
+	provider, err := NewDNSProviderConfig(config)
+	require.NoError(t, err)
+
+	serverURL, _ := url.Parse(server.URL)
+	provider.client.BaseURL = serverURL
+	provider.client.HTTPClient = server.Client()
+
+	err = provider.CleanUp("example.com", "", "123d==")
+	require.Error(t, err)
 }
