@@ -13,7 +13,7 @@ func TestNewClient(t *testing.T) {
 	require.Equal(t, "test-secret-key", client.secretKey)
 	require.Equal(t, "test-project-id", client.projectId)
 	require.Equal(t, "hk", client.region)
-	require.NotNil(t, client.client)
+	require.NotNil(t, client.HTTPClient)
 }
 
 func TestClient_generateSignature(t *testing.T) {
@@ -79,12 +79,4 @@ func TestRecord(t *testing.T) {
 	require.Equal(t, "TXT", record.DnsType)
 	require.Equal(t, "test-value", record.Content)
 	require.Equal(t, "300", record.TTL)
-}
-
-func TestRecordID(t *testing.T) {
-	recordID := RecordID{
-		RecordID: "123456",
-	}
-
-	require.Equal(t, "123456", recordID.RecordID)
 }

@@ -106,7 +106,7 @@ func (d *DNSProvider) Present(domain, token, keyAuth string) error {
 		return fmt.Errorf("ucloud: %w", err)
 	}
 
-	// Dn 必须是父域名，RecordName 必须是完整域名
+	// Dn must be the parent domain, RecordName must be the fully qualified domain name
 	record := internal.Record{
 		Dn:         zone,
 		RecordName: subDomain + "." + zone,
@@ -138,7 +138,7 @@ func (d *DNSProvider) CleanUp(domain, token, keyAuth string) error {
 	}
 
 	// Delete record directly using Dn, RecordName, DnsType, Content
-	// RecordName 必须是完整域名格式
+	// RecordName must be in fully qualified domain name format
 	err = d.client.DeleteRecord(zone, subDomain+"."+zone, "TXT", info.Value)
 	if err != nil {
 		return fmt.Errorf("ucloud: delete record: %w", err)

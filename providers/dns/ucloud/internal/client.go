@@ -9,11 +9,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"time"
-
-	"github.com/go-acme/lego/v4/log"
 )
+
+const defaultBaseURL = "https://api.ucloud.cn"
 
 // Client is a UCloud API client.
 type Client struct {
@@ -21,19 +22,22 @@ type Client struct {
 	secretKey string
 	projectId string
 	region    string
-	client    *http.Client
+
+	BaseURL    *url.URL
+	HTTPClient *http.Client
 }
 
 // NewClient creates a new UCloud API client.
 func NewClient(publicKey, secretKey, projectId, region string) *Client {
+	baseURL, _ := url.Parse(defaultBaseURL)
+
 	return &Client{
-		publicKey: publicKey,
-		secretKey: secretKey,
-		projectId: projectId,
-		region:    region,
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		publicKey:  publicKey,
+		secretKey:  secretKey,
+		projectId:  projectId,
+		region:     region,
+		BaseURL:    baseURL,
+		HTTPClient: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
@@ -120,7 +124,7 @@ func (c *Client) FindZone(domain string) (string, error) {
 }
 
 func (c *Client) doRequest(action string, params map[string]interface{}) (map[string]interface{}, error) {
-	baseURL := "https://api.ucloud.cn"
+	baseURL := c.BaseURL.String()
 
 	reqParams := make(map[string]interface{})
 	for k, v := range params {
@@ -149,8 +153,6 @@ func (c *Client) doRequest(action string, params map[string]interface{}) (map[st
 		return nil, err
 	}
 
-	log.Infof("[UCloud] action=%s params=%v json=%v", action, params, reqParams)
-
 	req, err := http.NewRequest(http.MethodPost, baseURL, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, err
@@ -158,7 +160,7 @@ func (c *Client) doRequest(action string, params map[string]interface{}) (map[st
 
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.client.Do(req)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -172,21 +174,16 @@ func (c *Client) doRequest(action string, params map[string]interface{}) (map[st
 	var result map[string]interface{}
 	err = json.Unmarshal(body, &result)
 	if err != nil {
-		log.Infof("[UCloud] action=%s error: %v", action, err)
 		return nil, err
 	}
 
 	// Check for errors - UCloud API returns error info in response body even with 200 status
 	if errCode, ok := result["RetCode"].(float64); ok && errCode != 0 {
 		if errMsg, ok := result["Message"].(string); ok {
-			log.Infof("[UCloud] action=%s error: code %.0f, message: %s", action, errCode, errMsg)
 			return nil, fmt.Errorf("ucloud API error (code %.0f): %s", errCode, errMsg)
 		}
-		log.Infof("[UCloud] action=%s error: code %.0f", action, errCode)
 		return nil, fmt.Errorf("ucloud API error: code %.0f", errCode)
 	}
-
-	log.Infof("[UCloud] action=%s success", action)
 
 	return result, nil
 }

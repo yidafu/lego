@@ -1,9 +1,14 @@
 package ucloud
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/go-acme/lego/v4/platform/tester"
+	"github.com/go-acme/lego/v4/providers/dns/ucloud/internal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -133,4 +138,95 @@ func TestLiveCleanUp(t *testing.T) {
 
 	err = provider.CleanUp(envTest.GetDomain(), "", "123d==")
 	require.NoError(t, err)
+}
+
+// TestInternalClientAddRecord tests the internal client's AddRecord method
+// against a mock server.
+func TestInternalClientAddRecord(t *testing.T) {
+	var receivedBody map[string]interface{}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(rw http.ResponseWriter, req *http.Request) {
+		err := json.NewDecoder(req.Body).Decode(&receivedBody)
+		if err != nil {
+			http.Error(rw, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusOK)
+		json.NewEncoder(rw).Encode(map[string]interface{}{
+			"RetCode": 0,
+			"Action":  "UdnrDomainDNSAdd",
+			"Message": "Success",
+			"Data":    map[string]interface{}{},
+		})
+	})
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	client := internal.NewClient("test-public-key", "test-secret-key", "", "")
+	serverURL, _ := url.Parse(server.URL)
+	client.BaseURL = serverURL
+	client.HTTPClient = server.Client()
+
+	record := internal.Record{
+		Dn:         "example.com.",
+		RecordName: "_acme-challenge.example.com.",
+		DnsType:    "TXT",
+		Content:   "test-value",
+		TTL:       "600",
+	}
+
+	err := client.AddRecord(record)
+	require.NoError(t, err)
+	require.Equal(t, "UdnrDomainDNSAdd", receivedBody["Action"])
+	require.Equal(t, "test-public-key", receivedBody["PublicKey"])
+	require.Equal(t, "example.com.", receivedBody["Dn"])
+	require.Equal(t, "_acme-challenge.example.com.", receivedBody["RecordName"])
+	require.Equal(t, "TXT", receivedBody["DnsType"])
+	require.Equal(t, "test-value", receivedBody["Content"])
+	require.Equal(t, "600", receivedBody["TTL"])
+}
+
+// TestInternalClientDeleteRecord tests the internal client's DeleteRecord method
+// against a mock server.
+func TestInternalClientDeleteRecord(t *testing.T) {
+	var receivedBody map[string]interface{}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(rw http.ResponseWriter, req *http.Request) {
+		err := json.NewDecoder(req.Body).Decode(&receivedBody)
+		if err != nil {
+			http.Error(rw, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusOK)
+		json.NewEncoder(rw).Encode(map[string]interface{}{
+			"RetCode": 0,
+			"Action":  "UdnrDeleteDnsRecord",
+			"Message": "Success",
+			"Data":    map[string]interface{}{},
+		})
+	})
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	client := internal.NewClient("test-public-key", "test-secret-key", "", "")
+	serverURL, _ := url.Parse(server.URL)
+	client.BaseURL = serverURL
+	client.HTTPClient = server.Client()
+
+	err := client.DeleteRecord("example.com.", "_acme-challenge.example.com.", "TXT", "test-value")
+	require.NoError(t, err)
+	require.Equal(t, "UdnrDeleteDnsRecord", receivedBody["Action"])
+	require.Equal(t, "test-public-key", receivedBody["PublicKey"])
+	require.Equal(t, "example.com.", receivedBody["Dn"])
+	require.Equal(t, "_acme-challenge.example.com.", receivedBody["RecordName"])
+	require.Equal(t, "TXT", receivedBody["DnsType"])
+	require.Equal(t, "test-value", receivedBody["Content"])
 }
